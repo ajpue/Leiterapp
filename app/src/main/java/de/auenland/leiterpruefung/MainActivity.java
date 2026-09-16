@@ -51,9 +51,11 @@ public class MainActivity extends Activity {
     private EditText inspector;
     private EditText location;
     private EditText ladderType;
+    private EditText rungCount;
     private EditText intervalMonths;
     private EditText defect;
     private TextView photoInfo;
+    private Button deactivateButton;
     private final Spinner[] stepSpinners = new Spinner[6];
     private String currentPhotoPath;
     private String lastLoadedLadderId = "";
@@ -115,6 +117,7 @@ public class MainActivity extends Activity {
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
             @Override public void afterTextChanged(Editable s) {
                 String id = normalizeLadderId(s.toString());
+                updateDeactivateButton(id);
                 if (db.isValidLadder(id) && !id.equals(lastLoadedLadderId)) {
                     loadLastLadderData(id);
                 }
@@ -152,6 +155,10 @@ public class MainActivity extends Activity {
 
         Button save = addButton(box, "Prüfung speichern");
         save.setOnClickListener(v -> saveInspection());
+
+        deactivateButton = addButton(box, "Leiter deaktivieren");
+        deactivateButton.setEnabled(false);
+        deactivateButton.setOnClickListener(v -> toggleLadderActiveState());
 
         Button inventory = addButton(box, "Leiterbestand / Prüffälligkeit");
         inventory.setOnClickListener(v ->
@@ -221,6 +228,10 @@ public class MainActivity extends Activity {
             toast("Ungültige Leiter-ID. Erlaubt: L-0001 bis L-0300.");
             return;
         }
+        if (!db.isLadderActive(id)) {
+            toast("Diese Leiter ist außer Betrieb. Erst reaktivieren.");
+            return;
+        }
         String inspectorText = inspector.getText().toString().trim();
         if (inspectorText.isEmpty()) {
             toast("Bitte Prüfer eintragen.");
@@ -228,6 +239,20 @@ public class MainActivity extends Activity {
         }
         getSharedPreferences(PREFS_MAIN, MODE_PRIVATE)
                 .edit().putString(KEY_LAST_INSPECTOR, inspectorText).apply();
+
+        Integer rungCountValue = null;
+        String rungText = rungCount.getText().toString().trim();
+        if (!rungText.isEmpty()) {
+            try {
+                rungCountValue = Integer.parseInt(rungText);
+                if (rungCountValue < 1 || rungCountValue > 100) {
+                    throw new NumberFormatException();
+                }
+            } catch (Exception e) {
+                toast("Sprossen/Stufen Anzahl muss zwischen 1 und 100 liegen.");
+                return;
+            }
+        }
 
         int interval = 12;
 
@@ -255,6 +280,11 @@ public class MainActivity extends Activity {
         cv.put("ts", now);
         cv.put("location", location.getText().toString().trim());
         cv.put("ladder_type", ladderType.getText().toString().trim());
+        if (rungCountValue == null) {
+            cv.putNull("rung_count");
+        } else {
+            cv.put("rung_count", rungCountValue);
+        }
         cv.put("interval_months", interval);
         cv.put("next_ts", cal.getTimeInMillis());
         cv.put("status", hasDefect ? "MANGEL / GESPERRT" : "i.O.");
@@ -281,6 +311,68 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void updateDeactivateButton(String id) {
+        if (deactivateButton == null) return;
+
+        boolean valid = db.isValidLadder(id);
+        boolean recorded = valid && db.hasInspections(id);
+        deactivateButton.setEnabled(recorded);
+
+        if (!recorded) {
+            deactivateButton.setText("Leiter deaktivieren");
+            return;
+        }
+
+        deactivateButton.setText(db.isLadderActive(id)
+                ? "Leiter deaktivieren"
+                : "Leiter reaktivieren");
+    }
+
+    private void toggleLadderActiveState() {
+        String id = normalizeLadderId(ladderId.getText().toString());
+
+        if (!db.isValidLadder(id) || !db.hasInspections(id)) {
+            toast("Bitte zuerst eine bereits erfasste Leiter-ID eingeben oder scannen.");
+            return;
+        }
+
+        if (db.isLadderActive(id)) {
+            final EditText reason = new EditText(this);
+            reason.setHint("Grund, z. B. verschrottet / verloren / ausgemustert");
+
+            new AlertDialog.Builder(this)
+                    .setTitle(id + " deaktivieren?")
+                    .setMessage("Die Leiter wird nicht gelöscht. Historie und Prüfungen bleiben erhalten.")
+                    .setView(reason)
+                    .setNegativeButton("Abbrechen", null)
+                    .setPositiveButton("Deaktivieren", (d, w) -> {
+                        String why = reason.getText().toString().trim();
+                        if (why.isEmpty()) why = "Außer Betrieb";
+                        db.deactivateLadder(id, why);
+                        BackupManager.backupAfterInspection(this, db);
+                        updateDeactivateButton(id);
+                        toast(id + " ist jetzt außer Betrieb.");
+                    })
+                    .show();
+        } else {
+            String reason = db.ladderDeactivationReason(id);
+            String msg = "Die Leiter wird wieder für neue Prüfungen freigegeben.";
+            if (!reason.isEmpty()) msg += "\n\nBisheriger Grund: " + reason;
+
+            new AlertDialog.Builder(this)
+                    .setTitle(id + " reaktivieren?")
+                    .setMessage(msg)
+                    .setNegativeButton("Abbrechen", null)
+                    .setPositiveButton("Reaktivieren", (d, w) -> {
+                        db.reactivateLadder(id);
+                        BackupManager.backupAfterInspection(this, db);
+                        updateDeactivateButton(id);
+                        toast(id + " ist wieder aktiv.");
+                    })
+                    .show();
+        }
+    }
+
     private void loadLastLadderData(String id) {
         lastLoadedLadderId = id;
 
@@ -290,15 +382,20 @@ public class MainActivity extends Activity {
                         ? "" : c.getString(c.getColumnIndexOrThrow("location"));
                 String oldType = c.isNull(c.getColumnIndexOrThrow("ladder_type"))
                         ? "" : c.getString(c.getColumnIndexOrThrow("ladder_type"));
+                int rungIdx = c.getColumnIndex("rung_count");
+                String oldRungCount = (rungIdx >= 0 && !c.isNull(rungIdx))
+                        ? String.valueOf(c.getInt(rungIdx)) : "";
 
                 location.setText(oldLocation);
                 ladderType.setText(oldType);
+                rungCount.setText(oldRungCount);
 
                 toast("Stammdaten von " + id + " übernommen.");
             } else {
                 // Neue Leiter-ID: keine Daten aus einer vorherigen Leiter stehen lassen.
                 location.setText("");
                 ladderType.setText("");
+                rungCount.setText("");
             }
         } catch (Exception e) {
             toast("Stammdaten konnten nicht geladen werden.");
@@ -415,6 +512,7 @@ public class MainActivity extends Activity {
         if (scanResult != null && scanResult.getContents() != null) {
             String id = normalizeLadderId(scanResult.getContents());
             ladderId.setText(id);
+            updateDeactivateButton(id);
             if (db.isValidLadder(id)) {
                 loadLastLadderData(id);
             }

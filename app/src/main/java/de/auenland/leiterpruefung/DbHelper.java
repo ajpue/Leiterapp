@@ -16,7 +16,7 @@ import java.util.Locale;
 
 public class DbHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "leiterpruefung.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 3;
 
     public DbHelper(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
@@ -24,7 +24,12 @@ public class DbHelper extends SQLiteOpenHelper {
 
     @Override
     public void onCreate(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE ladders (id TEXT PRIMARY KEY)");
+        db.execSQL("CREATE TABLE ladders (" +
+                "id TEXT PRIMARY KEY," +
+                "active INTEGER NOT NULL DEFAULT 1," +
+                "deactivated_at INTEGER," +
+                "deactivation_reason TEXT" +
+                ")");
         db.execSQL("CREATE TABLE inspections (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "ladder_id TEXT NOT NULL," +
@@ -32,6 +37,7 @@ public class DbHelper extends SQLiteOpenHelper {
                 "ts INTEGER NOT NULL," +
                 "location TEXT," +
                 "ladder_type TEXT," +
+                "rung_count INTEGER," +
                 "interval_months INTEGER NOT NULL," +
                 "next_ts INTEGER NOT NULL," +
                 "status TEXT NOT NULL," +
@@ -59,7 +65,14 @@ public class DbHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // Version 1: keine Migration nötig.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE inspections ADD COLUMN rung_count INTEGER");
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE ladders ADD COLUMN active INTEGER NOT NULL DEFAULT 1");
+            db.execSQL("ALTER TABLE ladders ADD COLUMN deactivated_at INTEGER");
+            db.execSQL("ALTER TABLE ladders ADD COLUMN deactivation_reason TEXT");
+        }
     }
 
     public boolean isValidLadder(String ladderId) {
@@ -69,6 +82,48 @@ public class DbHelper extends SQLiteOpenHelper {
             return c.moveToFirst();
         }
     }
+
+    public boolean hasInspections(String ladderId) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT 1 FROM inspections WHERE ladder_id = ? LIMIT 1",
+                new String[]{ladderId})) {
+            return c.moveToFirst();
+        }
+    }
+
+    public boolean isLadderActive(String ladderId) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT active FROM ladders WHERE id = ? LIMIT 1",
+                new String[]{ladderId})) {
+            return c.moveToFirst() && c.getInt(0) != 0;
+        }
+    }
+
+    public String ladderDeactivationReason(String ladderId) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT deactivation_reason FROM ladders WHERE id = ? LIMIT 1",
+                new String[]{ladderId})) {
+            if (c.moveToFirst() && !c.isNull(0)) return c.getString(0);
+        }
+        return "";
+    }
+
+    public void deactivateLadder(String ladderId, String reason) {
+        ContentValues cv = new ContentValues();
+        cv.put("active", 0);
+        cv.put("deactivated_at", System.currentTimeMillis());
+        cv.put("deactivation_reason", reason == null ? "" : reason.trim());
+        getWritableDatabase().update("ladders", cv, "id = ?", new String[]{ladderId});
+    }
+
+    public void reactivateLadder(String ladderId) {
+        ContentValues cv = new ContentValues();
+        cv.put("active", 1);
+        cv.putNull("deactivated_at");
+        cv.putNull("deactivation_reason");
+        getWritableDatabase().update("ladders", cv, "id = ?", new String[]{ladderId});
+    }
+
 
     public long insertInspection(ContentValues cv) {
         return getWritableDatabase().insertOrThrow("inspections", null, cv);
@@ -94,11 +149,16 @@ public class DbHelper extends SQLiteOpenHelper {
                 String status = c.getString(c.getColumnIndexOrThrow("status"));
                 String inspector = c.getString(c.getColumnIndexOrThrow("inspector"));
                 String defect = c.getString(c.getColumnIndexOrThrow("defect"));
+                int rungIdx = c.getColumnIndex("rung_count");
+                Integer rungCount = (rungIdx >= 0 && !c.isNull(rungIdx)) ? c.getInt(rungIdx) : null;
                 sb.append(DateFormat.getDateTimeInstance(
                                 DateFormat.SHORT, DateFormat.SHORT, Locale.GERMANY)
                         .format(new Date(ts)))
                   .append("  •  ").append(status)
                   .append("\nPrüfer: ").append(inspector);
+                if (rungCount != null) {
+                    sb.append("\nSprossen/Stufen: ").append(rungCount);
+                }
                 if (defect != null && !defect.trim().isEmpty()) {
                     sb.append("\nMangel: ").append(defect.trim());
                 }
@@ -123,7 +183,8 @@ public class DbHelper extends SQLiteOpenHelper {
     public Cursor inventory(boolean onlyRecorded, String search) {
         String base =
                 "SELECT l.id AS ladder_id, " +
-                "i.location, i.ladder_type, i.status, i.next_ts, i.ts " +
+                "i.location, i.ladder_type, i.status, i.next_ts, i.ts, " +
+                "l.active, l.deactivated_at, l.deactivation_reason " +
                 "FROM ladders l " +
                 "LEFT JOIN inspections i ON i.id = (" +
                 "SELECT ii.id FROM inspections ii " +
@@ -154,6 +215,25 @@ public class DbHelper extends SQLiteOpenHelper {
         return getReadableDatabase().rawQuery(sql.toString(), args.toArray(new String[0]));
     }
 
+    public int activeRecordedLadderCount() {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT COUNT(DISTINCT i.ladder_id) " +
+                "FROM inspections i JOIN ladders l ON l.id = i.ladder_id " +
+                "WHERE l.active = 1", null)) {
+            return c.moveToFirst() ? c.getInt(0) : 0;
+        }
+    }
+
+    public int inactiveRecordedLadderCount() {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT COUNT(DISTINCT i.ladder_id) " +
+                "FROM inspections i JOIN ladders l ON l.id = i.ladder_id " +
+                "WHERE l.active = 0", null)) {
+            return c.moveToFirst() ? c.getInt(0) : 0;
+        }
+    }
+
+
     public int recordedLadderCount() {
         try (Cursor c = getReadableDatabase().rawQuery(
                 "SELECT COUNT(DISTINCT ladder_id) FROM inspections", null)) {
@@ -174,6 +254,22 @@ public class DbHelper extends SQLiteOpenHelper {
         root.put("format", "leiterpruefung-backup");
         root.put("version", 1);
         root.put("exportedAt", System.currentTimeMillis());
+
+        JSONArray ladderStates = new JSONArray();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id, active, deactivated_at, deactivation_reason FROM ladders ORDER BY id", null)) {
+            while (c.moveToNext()) {
+                JSONObject row = new JSONObject();
+                row.put("id", c.getString(0));
+                row.put("active", c.getInt(1));
+                if (c.isNull(2)) row.put("deactivated_at", JSONObject.NULL);
+                else row.put("deactivated_at", c.getLong(2));
+                if (c.isNull(3)) row.put("deactivation_reason", JSONObject.NULL);
+                else row.put("deactivation_reason", c.getString(3));
+                ladderStates.put(row);
+            }
+        }
+        root.put("ladders", ladderStates);
 
         JSONArray rows = new JSONArray();
         try (Cursor c = allInspections()) {
@@ -211,6 +307,26 @@ public class DbHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
+            if (root.has("ladders")) {
+                JSONArray ladderStates = root.getJSONArray("ladders");
+                for (int i = 0; i < ladderStates.length(); i++) {
+                    JSONObject ls = ladderStates.getJSONObject(i);
+                    ContentValues state = new ContentValues();
+                    state.put("active", ls.optInt("active", 1));
+                    if (ls.has("deactivated_at") && !ls.isNull("deactivated_at")) {
+                        state.put("deactivated_at", ls.optLong("deactivated_at"));
+                    } else {
+                        state.putNull("deactivated_at");
+                    }
+                    if (ls.has("deactivation_reason") && !ls.isNull("deactivation_reason")) {
+                        state.put("deactivation_reason", ls.optString("deactivation_reason", ""));
+                    } else {
+                        state.putNull("deactivation_reason");
+                    }
+                    db.update("ladders", state, "id = ?", new String[]{ls.optString("id", "")});
+                }
+            }
+
             db.delete("inspections", null, null);
             for (int i = 0; i < rows.length(); i++) {
                 JSONObject row = rows.getJSONObject(i);
@@ -221,6 +337,7 @@ public class DbHelper extends SQLiteOpenHelper {
                 putLongIfPresent(cv, row, "ts");
                 putString(cv, row, "location");
                 putString(cv, row, "ladder_type");
+                putLongIfPresent(cv, row, "rung_count");
                 putLongIfPresent(cv, row, "interval_months");
                 putLongIfPresent(cv, row, "next_ts");
                 putString(cv, row, "status");

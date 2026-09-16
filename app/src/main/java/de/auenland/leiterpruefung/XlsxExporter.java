@@ -50,7 +50,7 @@ public final class XlsxExporter {
 
             String[] headers = {
                     "Leiter", "Prüfer", "Datum/Zeit", "Standort", "Leiterart",
-                    "Intervall Monate", "Nächste Prüfung", "Status", "Mangel",
+                    "Sprossen/Stufen", "Intervall Monate", "Nächste Prüfung", "Status", "Mangel",
                     "Foto", "1 Holme/Sprossen", "2 Verbindungen", "3 Füße/Gelenke",
                     "4 Verriegelungen", "5 Kennzeichnung", "6 Gesamtprüfung"
             };
@@ -65,6 +65,7 @@ public final class XlsxExporter {
                         df.format(new Date(c.getLong(c.getColumnIndexOrThrow("ts")))),
                         get(c, "location"),
                         get(c, "ladder_type"),
+                        get(c, "rung_count"),
                         String.valueOf(c.getInt(c.getColumnIndexOrThrow("interval_months"))),
                         df.format(new Date(c.getLong(c.getColumnIndexOrThrow("next_ts")))),
                         get(c, "status"),

@@ -67,7 +67,7 @@ public class InventoryActivity extends Activity {
         root.addView(modeButton);
 
         TextView legend = new TextView(this);
-        legend.setText("GRÜN = Prüfung gültig   •   ROT = fällig / überfällig / Mangel / noch nicht geprüft");
+        legend.setText("GRÜN = Prüfung gültig   •   ROT = fällig / überfällig / Mangel / noch nicht geprüft   •   GRAU = außer Betrieb");
         legend.setPadding(0, dp(8), 0, dp(8));
         root.addView(legend);
 
@@ -91,7 +91,10 @@ public class InventoryActivity extends Activity {
         list.removeAllViews();
 
         int recorded = db.recordedLadderCount();
-        count.setText(recorded + " von 300 Leitern im Bestand");
+        int active = db.activeRecordedLadderCount();
+        int inactive = db.inactiveRecordedLadderCount();
+        count.setText(active + " aktiv • " + inactive + " außer Betrieb • " +
+                recorded + " insgesamt erfasst");
 
         String q = search == null ? "" : search.getText().toString();
         try (Cursor c = db.inventory(onlyRecorded, q)) {
@@ -106,6 +109,12 @@ public class InventoryActivity extends Activity {
                         ? "" : c.getString(c.getColumnIndexOrThrow("ladder_type"));
                 String status = c.isNull(c.getColumnIndexOrThrow("status"))
                         ? "" : c.getString(c.getColumnIndexOrThrow("status"));
+
+                boolean activeLadder = c.getInt(c.getColumnIndexOrThrow("active")) != 0;
+                String deactivationReason = c.isNull(c.getColumnIndexOrThrow("deactivation_reason"))
+                        ? "" : c.getString(c.getColumnIndexOrThrow("deactivation_reason"));
+                long deactivatedAt = c.isNull(c.getColumnIndexOrThrow("deactivated_at"))
+                        ? 0L : c.getLong(c.getColumnIndexOrThrow("deactivated_at"));
 
                 long nextTs = c.isNull(c.getColumnIndexOrThrow("next_ts"))
                         ? 0L : c.getLong(c.getColumnIndexOrThrow("next_ts"));
@@ -124,14 +133,21 @@ public class InventoryActivity extends Activity {
                 cardLp.bottomMargin = dp(8);
 
                 // bewusst einfache, kontrastreiche Ampelfarben für altes Android
-                card.setBackgroundColor(due
-                        ? Color.rgb(255, 205, 205)
-                        : Color.rgb(205, 245, 205));
+                if (!activeLadder && recordedRow) {
+                    card.setBackgroundColor(Color.rgb(220, 220, 220));
+                } else {
+                    card.setBackgroundColor(due
+                            ? Color.rgb(255, 205, 205)
+                            : Color.rgb(205, 245, 205));
+                }
 
                 TextView top = new TextView(this);
                 top.setTextSize(19);
                 top.setTextColor(Color.BLACK);
-                top.setText(id + "   " + (due ? "ROT" : "GRÜN"));
+                String stateText = (!activeLadder && recordedRow)
+                        ? "AUSSER BETRIEB"
+                        : (due ? "ROT" : "GRÜN");
+                top.setText(id + "   " + stateText);
                 card.addView(top);
 
                 TextView details = new TextView(this);
@@ -144,6 +160,17 @@ public class InventoryActivity extends Activity {
                     SimpleDateFormat df = new SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY);
                     StringBuilder sb = new StringBuilder();
 
+                    if (!activeLadder) {
+                        sb.append("AUSSER BETRIEB");
+                        if (deactivatedAt > 0) {
+                            sb.append(" seit ").append(df.format(new Date(deactivatedAt)));
+                        }
+                        if (!deactivationReason.trim().isEmpty()) {
+                            sb.append("\nGrund: ").append(deactivationReason.trim());
+                        }
+                        sb.append("\n");
+                    }
+
                     if (!location.trim().isEmpty()) {
                         sb.append("Standort: ").append(location.trim()).append("\n");
                     }
@@ -154,7 +181,9 @@ public class InventoryActivity extends Activity {
                     sb.append("Letzter Status: ").append(status).append("\n");
                     sb.append("Nächste Prüfung: ").append(df.format(new Date(nextTs)));
 
-                    if (nextTs <= System.currentTimeMillis()) {
+                    if (!activeLadder) {
+                        sb.append("\nKeine neue Prüfung möglich, bis die Leiter reaktiviert wird.");
+                    } else if (nextTs <= System.currentTimeMillis()) {
                         sb.append("\nPRÜFUNG FÄLLIG / ÜBERFÄLLIG");
                     } else if (!"i.O.".equals(status)) {
                         sb.append("\nLEITER GESPERRT / MANGEL");
