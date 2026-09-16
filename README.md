@@ -1,4 +1,4 @@
-# Leiterprüfung Android v0.6.0
+# Leiterprüfung Android v0.6.1
 
 Schlanke Offline-App für die Leiterprüfung auf älteren Android-Geräten.
 
@@ -89,3 +89,10 @@ Die App speichert ihre Arbeitsdaten lokal in SQLite. Das JSON-Backup ist für Ge
 - Derselbe Button wird bei einer deaktivierten Leiter zu `Leiter reaktivieren`.
 - Deaktivierungsstatus und Grund werden im Backup mitgesichert.
 - Datenbankmigration erhält vorhandene Prüfungen.
+
+## Neu in v0.6.1
+- Kritischen Absturz beim Speichern behoben.
+- Sprossen/Stufen Anzahl ist jetzt eine Auswahlliste von 1 bis 100.
+- Auswahl ist vor dem Speichern Pflicht.
+- Bei bekannten Leiter-IDs wird die zuletzt gespeicherte Anzahl automatisch vorausgewählt.
+- Deaktivieren/Reaktivieren und Bestand bleiben erhalten.

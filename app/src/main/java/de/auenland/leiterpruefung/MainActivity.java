@@ -51,7 +51,7 @@ public class MainActivity extends Activity {
     private EditText inspector;
     private EditText location;
     private EditText ladderType;
-    private EditText rungCount;
+    private Spinner rungCountSpinner;
     private EditText intervalMonths;
     private EditText defect;
     private TextView photoInfo;
@@ -111,6 +111,23 @@ public class MainActivity extends Activity {
 
         location = addText(box, "Standort", false);
         ladderType = addText(box, "Leiterart", false);
+
+        TextView rungLabel = new TextView(this);
+        rungLabel.setText("Sprossen/Stufen Anzahl");
+        rungLabel.setPadding(0, dp(8), 0, dp(4));
+        box.addView(rungLabel);
+
+        rungCountSpinner = new Spinner(this);
+        String[] rungOptions = new String[101];
+        rungOptions[0] = "Bitte wählen";
+        for (int i = 1; i <= 100; i++) {
+            rungOptions[i] = String.valueOf(i);
+        }
+        ArrayAdapter<String> rungAdapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item, rungOptions);
+        rungAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        rungCountSpinner.setAdapter(rungAdapter);
+        box.addView(rungCountSpinner);
 
         ladderId.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -240,19 +257,12 @@ public class MainActivity extends Activity {
         getSharedPreferences(PREFS_MAIN, MODE_PRIVATE)
                 .edit().putString(KEY_LAST_INSPECTOR, inspectorText).apply();
 
-        Integer rungCountValue = null;
-        String rungText = rungCount.getText().toString().trim();
-        if (!rungText.isEmpty()) {
-            try {
-                rungCountValue = Integer.parseInt(rungText);
-                if (rungCountValue < 1 || rungCountValue > 100) {
-                    throw new NumberFormatException();
-                }
-            } catch (Exception e) {
-                toast("Sprossen/Stufen Anzahl muss zwischen 1 und 100 liegen.");
-                return;
-            }
+        int rungPosition = rungCountSpinner.getSelectedItemPosition();
+        if (rungPosition < 1 || rungPosition > 100) {
+            toast("Bitte Sprossen/Stufen Anzahl auswählen.");
+            return;
         }
+        int rungCountValue = rungPosition;
 
         int interval = 12;
 
@@ -280,11 +290,7 @@ public class MainActivity extends Activity {
         cv.put("ts", now);
         cv.put("location", location.getText().toString().trim());
         cv.put("ladder_type", ladderType.getText().toString().trim());
-        if (rungCountValue == null) {
-            cv.putNull("rung_count");
-        } else {
-            cv.put("rung_count", rungCountValue);
-        }
+        cv.put("rung_count", rungCountValue);
         cv.put("interval_months", interval);
         cv.put("next_ts", cal.getTimeInMillis());
         cv.put("status", hasDefect ? "MANGEL / GESPERRT" : "i.O.");
@@ -388,14 +394,24 @@ public class MainActivity extends Activity {
 
                 location.setText(oldLocation);
                 ladderType.setText(oldType);
-                rungCount.setText(oldRungCount);
+                if (oldRungCount.isEmpty()) {
+                    rungCountSpinner.setSelection(0);
+                } else {
+                    try {
+                        int oldCount = Integer.parseInt(oldRungCount);
+                        rungCountSpinner.setSelection(
+                                oldCount >= 1 && oldCount <= 100 ? oldCount : 0);
+                    } catch (Exception ignored) {
+                        rungCountSpinner.setSelection(0);
+                    }
+                }
 
                 toast("Stammdaten von " + id + " übernommen.");
             } else {
                 // Neue Leiter-ID: keine Daten aus einer vorherigen Leiter stehen lassen.
                 location.setText("");
                 ladderType.setText("");
-                rungCount.setText("");
+                rungCountSpinner.setSelection(0);
             }
         } catch (Exception e) {
             toast("Stammdaten konnten nicht geladen werden.");
