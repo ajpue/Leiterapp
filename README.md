@@ -1,4 +1,4 @@
-# Leiterprüfung Android v0.3.0
+# Leiterprüfung Android v0.4.0
 
 Schlanke Offline-App für die Leiterprüfung auf älteren Android-Geräten.
 
@@ -52,3 +52,13 @@ Beim ersten Einsatz unter **SD-/Backup-Ordner wählen** einen Ordner auf der SD-
 Danach wird nach jeder gespeicherten Prüfung automatisch gesichert.
 
 Die App speichert ihre Arbeitsdaten lokal in SQLite. Das JSON-Backup ist für Gerätewechsel/Wiederherstellung gedacht.
+
+## Neu in v0.4.0
+- Leiterbestand direkt in der App
+- Zähler: `x von 300 Leitern im Bestand`
+- Suche nach Leiter-ID, Standort oder Leiterart
+- Umschaltung zwischen `nur erfasste Leitern` und `alle 300 Leiter-IDs`
+- Ampelanzeige:
+  - GRÜN = Prüfung noch gültig und letzter Status i.O.
+  - ROT = fällig/überfällig, Mangel/Gesperrt oder noch nie geprüft
+- Prüfintervall fest auf 12 Monate gesetzt

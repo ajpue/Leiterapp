@@ -99,8 +99,9 @@ public class MainActivity extends Activity {
         inspector = addText(box, "Prüfer", false);
         location = addText(box, "Standort", false);
         ladderType = addText(box, "Leiterart", false);
-        intervalMonths = addText(box, "Prüfintervall in Monaten", true);
+        intervalMonths = addText(box, "Prüfintervall", true);
         intervalMonths.setText("12");
+        intervalMonths.setEnabled(false);
 
         for (int i = 0; i < STEP_TITLES.length; i++) {
             TextView label = new TextView(this);
@@ -130,6 +131,10 @@ public class MainActivity extends Activity {
 
         Button save = addButton(box, "Prüfung speichern");
         save.setOnClickListener(v -> saveInspection());
+
+        Button inventory = addButton(box, "Leiterbestand / Prüffälligkeit");
+        inventory.setOnClickListener(v ->
+                startActivity(new Intent(this, InventoryActivity.class)));
 
         Button history = addButton(box, "Historie der Leiter");
         history.setOnClickListener(v -> showHistory());
@@ -201,14 +206,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-        int interval;
-        try {
-            interval = Integer.parseInt(intervalMonths.getText().toString().trim());
-            if (interval < 1 || interval > 120) throw new NumberFormatException();
-        } catch (Exception e) {
-            toast("Prüfintervall muss zwischen 1 und 120 Monaten liegen.");
-            return;
-        }
+        int interval = 12;
 
         boolean hasDefect = false;
         String[] steps = new String[6];

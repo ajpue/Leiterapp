@@ -112,6 +112,48 @@ public class DbHelper extends SQLiteOpenHelper {
         return sb.toString();
     }
 
+    public Cursor inventory(boolean onlyRecorded, String search) {
+        String base =
+                "SELECT l.id AS ladder_id, " +
+                "i.location, i.ladder_type, i.status, i.next_ts, i.ts " +
+                "FROM ladders l " +
+                "LEFT JOIN inspections i ON i.id = (" +
+                "SELECT ii.id FROM inspections ii " +
+                "WHERE ii.ladder_id = l.id " +
+                "ORDER BY ii.ts DESC, ii.id DESC LIMIT 1" +
+                ") ";
+
+        StringBuilder sql = new StringBuilder(base);
+        java.util.ArrayList<String> args = new java.util.ArrayList<>();
+        boolean hasWhere = false;
+
+        if (onlyRecorded) {
+            sql.append("WHERE i.id IS NOT NULL ");
+            hasWhere = true;
+        }
+
+        String q = search == null ? "" : search.trim().toUpperCase(Locale.GERMANY);
+        if (!q.isEmpty()) {
+            sql.append(hasWhere ? "AND " : "WHERE ");
+            sql.append("(UPPER(l.id) LIKE ? OR UPPER(COALESCE(i.location,'')) LIKE ? OR UPPER(COALESCE(i.ladder_type,'')) LIKE ?) ");
+            String like = "%" + q + "%";
+            args.add(like);
+            args.add(like);
+            args.add(like);
+        }
+
+        sql.append("ORDER BY l.id");
+        return getReadableDatabase().rawQuery(sql.toString(), args.toArray(new String[0]));
+    }
+
+    public int recordedLadderCount() {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT COUNT(DISTINCT ladder_id) FROM inspections", null)) {
+            return c.moveToFirst() ? c.getInt(0) : 0;
+        }
+    }
+
+
     public int inspectionCount() {
         try (Cursor c = getReadableDatabase().rawQuery(
                 "SELECT COUNT(*) FROM inspections", null)) {
