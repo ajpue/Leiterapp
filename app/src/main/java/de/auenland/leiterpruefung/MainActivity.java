@@ -4,11 +4,14 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentValues;
+import android.content.res.ColorStateList;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.os.Bundle;
@@ -173,6 +176,14 @@ public class MainActivity extends Activity {
         photoInfo.setPadding(0, dp(4), 0, dp(6));
         box.addView(photoInfo);
 
+        Button save = addButton(box, "PRÜFUNG SPEICHERN");
+        save.setTextSize(20);
+        save.setTypeface(Typeface.DEFAULT_BOLD);
+        save.setMinHeight(dp(64));
+        save.setTextColor(Color.WHITE);
+        save.setBackgroundTintList(ColorStateList.valueOf(Color.rgb(35, 125, 60)));
+        save.setOnClickListener(v -> saveInspection());
+
         Button viewPhoto = addButton(box, "Foto ansehen");
         viewPhoto.setOnClickListener(v -> viewCurrentPhoto());
 
@@ -184,9 +195,6 @@ public class MainActivity extends Activity {
 
         Button emailPhoto = addButton(box, "Foto per E-Mail senden");
         emailPhoto.setOnClickListener(v -> shareCurrentPhoto(true));
-
-        Button save = addButton(box, "Prüfung speichern");
-        save.setOnClickListener(v -> saveInspection());
 
         deactivateButton = addButton(box, "Leiter deaktivieren");
         deactivateButton.setEnabled(false);

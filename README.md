@@ -1,4 +1,4 @@
-# Leiterprüfung Android v0.7.0
+# Leiterprüfung Android v0.7.1
 
 Schlanke Offline-App für die Leiterprüfung auf älteren Android-Geräten.
 
@@ -106,3 +106,8 @@ Die App speichert ihre Arbeitsdaten lokal in SQLite. Das JSON-Backup ist für Ge
 - Prüffotos gezielt per E-Mail senden.
 - Andere Freigabeziele werden bewusst nicht angeboten.
 - Nach dem Löschen eines historischen Fotos wird das Backup aktualisiert.
+
+## Neu in v0.7.1
+- `PRÜFUNG SPEICHERN` ist jetzt der erste Aktionsbutton nach der Fotoaufnahme.
+- Speicherbutton deutlich größer, fett und grün hervorgehoben.
+- Foto ansehen/löschen sowie Bluetooth/E-Mail folgen erst danach.
