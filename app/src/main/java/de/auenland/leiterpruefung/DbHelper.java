@@ -112,6 +112,14 @@ public class DbHelper extends SQLiteOpenHelper {
         return sb.toString();
     }
 
+    public Cursor latestInspectionForLadder(String ladderId) {
+        return getReadableDatabase().rawQuery(
+                "SELECT * FROM inspections WHERE ladder_id = ? " +
+                "ORDER BY ts DESC, id DESC LIMIT 1",
+                new String[]{ladderId});
+    }
+
+
     public Cursor inventory(boolean onlyRecorded, String search) {
         String base =
                 "SELECT l.id AS ladder_id, " +

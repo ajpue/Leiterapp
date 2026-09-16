@@ -1,4 +1,4 @@
-# Leiterprüfung Android v0.4.0
+# Leiterprüfung Android v0.5.0
 
 Schlanke Offline-App für die Leiterprüfung auf älteren Android-Geräten.
 
@@ -62,3 +62,11 @@ Die App speichert ihre Arbeitsdaten lokal in SQLite. Das JSON-Backup ist für Ge
   - GRÜN = Prüfung noch gültig und letzter Status i.O.
   - ROT = fällig/überfällig, Mangel/Gesperrt oder noch nie geprüft
 - Prüfintervall fest auf 12 Monate gesetzt
+
+## Neu in v0.5.0
+- Bei Eingabe oder Scan einer bereits bekannten Leiter-ID werden Stammdaten aus der letzten Prüfung automatisch übernommen:
+  - Standort
+  - Leiterart
+- Das Prüfintervall bleibt fest auf 12 Monate.
+- Der zuletzt verwendete Prüfername wird appweit gemerkt.
+- Alte Prüfergebnisse, Mängel und Fotos werden bewusst nicht übernommen.

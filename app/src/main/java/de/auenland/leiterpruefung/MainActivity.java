@@ -5,12 +5,16 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.text.InputType;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -39,6 +43,8 @@ public class MainActivity extends Activity {
     private static final int REQ_RESTORE = 1002;
     private static final int REQ_PHOTO = 1003;
     private static final int REQ_CAMERA_PERMISSION = 1004;
+    private static final String PREFS_MAIN = "main_prefs";
+    private static final String KEY_LAST_INSPECTOR = "last_inspector";
 
     private DbHelper db;
     private EditText ladderId;
@@ -50,6 +56,7 @@ public class MainActivity extends Activity {
     private TextView photoInfo;
     private final Spinner[] stepSpinners = new Spinner[6];
     private String currentPhotoPath;
+    private String lastLoadedLadderId = "";
 
     private static final String[] STEP_TITLES = {
             "1. Holme und Sprossen/Stufen",
@@ -97,8 +104,22 @@ public class MainActivity extends Activity {
         scan.setOnClickListener(v -> startScan());
 
         inspector = addText(box, "Prüfer", false);
+        SharedPreferences prefs = getSharedPreferences(PREFS_MAIN, MODE_PRIVATE);
+        inspector.setText(prefs.getString(KEY_LAST_INSPECTOR, ""));
+
         location = addText(box, "Standort", false);
         ladderType = addText(box, "Leiterart", false);
+
+        ladderId.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable s) {
+                String id = normalizeLadderId(s.toString());
+                if (db.isValidLadder(id) && !id.equals(lastLoadedLadderId)) {
+                    loadLastLadderData(id);
+                }
+            }
+        });
         intervalMonths = addText(box, "Prüfintervall", true);
         intervalMonths.setText("12");
         intervalMonths.setEnabled(false);
@@ -205,6 +226,8 @@ public class MainActivity extends Activity {
             toast("Bitte Prüfer eintragen.");
             return;
         }
+        getSharedPreferences(PREFS_MAIN, MODE_PRIVATE)
+                .edit().putString(KEY_LAST_INSPECTOR, inspectorText).apply();
 
         int interval = 12;
 
@@ -255,6 +278,30 @@ public class MainActivity extends Activity {
                     .show();
         } catch (Exception e) {
             toast("Speichern fehlgeschlagen: " + e.getMessage());
+        }
+    }
+
+    private void loadLastLadderData(String id) {
+        lastLoadedLadderId = id;
+
+        try (Cursor c = db.latestInspectionForLadder(id)) {
+            if (c.moveToFirst()) {
+                String oldLocation = c.isNull(c.getColumnIndexOrThrow("location"))
+                        ? "" : c.getString(c.getColumnIndexOrThrow("location"));
+                String oldType = c.isNull(c.getColumnIndexOrThrow("ladder_type"))
+                        ? "" : c.getString(c.getColumnIndexOrThrow("ladder_type"));
+
+                location.setText(oldLocation);
+                ladderType.setText(oldType);
+
+                toast("Stammdaten von " + id + " übernommen.");
+            } else {
+                // Neue Leiter-ID: keine Daten aus einer vorherigen Leiter stehen lassen.
+                location.setText("");
+                ladderType.setText("");
+            }
+        } catch (Exception e) {
+            toast("Stammdaten konnten nicht geladen werden.");
         }
     }
 
@@ -366,7 +413,11 @@ public class MainActivity extends Activity {
         IntentResult scanResult = IntentIntegrator.parseActivityResult(
                 requestCode, resultCode, data);
         if (scanResult != null && scanResult.getContents() != null) {
-            ladderId.setText(normalizeLadderId(scanResult.getContents()));
+            String id = normalizeLadderId(scanResult.getContents());
+            ladderId.setText(id);
+            if (db.isValidLadder(id)) {
+                loadLastLadderData(id);
+            }
             return;
         }
 
