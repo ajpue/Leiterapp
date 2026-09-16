@@ -134,6 +134,14 @@ public class DbHelper extends SQLiteOpenHelper {
                 "SELECT * FROM inspections ORDER BY ts DESC", null);
     }
 
+    public void clearPhotoForInspection(long inspectionId) {
+        ContentValues cv = new ContentValues();
+        cv.put("photo_path", "");
+        getWritableDatabase().update(
+                "inspections", cv, "id = ?", new String[]{String.valueOf(inspectionId)});
+    }
+
+
     public Cursor inspectionsForLadder(String ladderId) {
         return getReadableDatabase().rawQuery(
                 "SELECT * FROM inspections WHERE ladder_id = ? ORDER BY ts DESC",

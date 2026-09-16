@@ -7,6 +7,8 @@ import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.os.Bundle;
@@ -20,6 +22,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -167,8 +170,20 @@ public class MainActivity extends Activity {
 
         photoInfo = new TextView(this);
         photoInfo.setText("Kein Foto");
-        photoInfo.setPadding(0, dp(4), 0, dp(10));
+        photoInfo.setPadding(0, dp(4), 0, dp(6));
         box.addView(photoInfo);
+
+        Button viewPhoto = addButton(box, "Foto ansehen");
+        viewPhoto.setOnClickListener(v -> viewCurrentPhoto());
+
+        Button deletePhoto = addButton(box, "Foto löschen");
+        deletePhoto.setOnClickListener(v -> deleteCurrentPhoto());
+
+        Button bluetoothPhoto = addButton(box, "Foto per Bluetooth senden");
+        bluetoothPhoto.setOnClickListener(v -> shareCurrentPhoto(false));
+
+        Button emailPhoto = addButton(box, "Foto per E-Mail senden");
+        emailPhoto.setOnClickListener(v -> shareCurrentPhoto(true));
 
         Button save = addButton(box, "Prüfung speichern");
         save.setOnClickListener(v -> saveInspection());
@@ -424,12 +439,11 @@ public class MainActivity extends Activity {
             toast("Bitte gültige Leiter-ID eingeben oder scannen.");
             return;
         }
-        new AlertDialog.Builder(this)
-                .setTitle("Historie " + id)
-                .setMessage(db.historyText(id))
-                .setPositiveButton("OK", null)
-                .show();
+        Intent i = new Intent(this, HistoryActivity.class);
+        i.putExtra("ladder_id", id);
+        startActivity(i);
     }
+
 
     private void exportXlsx(boolean all) {
         String id = normalizeLadderId(ladderId.getText().toString());
@@ -509,6 +523,65 @@ public class MainActivity extends Activity {
                 toast("Kamerazugriff wurde nicht erlaubt.");
             }
         }
+    }
+
+    private void viewCurrentPhoto() {
+        if (currentPhotoPath == null || currentPhotoPath.trim().isEmpty()) {
+            toast("Kein Foto vorhanden.");
+            return;
+        }
+        File f = new File(currentPhotoPath);
+        if (!f.exists()) {
+            toast("Foto wurde nicht gefunden.");
+            return;
+        }
+        Bitmap bitmap = BitmapFactory.decodeFile(f.getAbsolutePath());
+        if (bitmap == null) {
+            toast("Foto konnte nicht geöffnet werden.");
+            return;
+        }
+        ImageView image = new ImageView(this);
+        image.setAdjustViewBounds(true);
+        image.setImageBitmap(bitmap);
+        int pad = dp(12);
+        image.setPadding(pad, pad, pad, pad);
+        new AlertDialog.Builder(this)
+                .setTitle("Foto")
+                .setView(image)
+                .setPositiveButton("Schließen", null)
+                .show();
+    }
+
+    private void deleteCurrentPhoto() {
+        if (currentPhotoPath == null || currentPhotoPath.trim().isEmpty()) {
+            toast("Kein Foto vorhanden.");
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Foto löschen?")
+                .setMessage("Nur das Foto wird gelöscht. Eine bereits gespeicherte Prüfung wird dadurch nicht verändert.")
+                .setNegativeButton("Abbrechen", null)
+                .setPositiveButton("Löschen", (d, w) -> {
+                    File f = new File(currentPhotoPath);
+                    if (f.exists()) f.delete();
+                    currentPhotoPath = null;
+                    photoInfo.setText("Kein Foto");
+                    toast("Foto gelöscht.");
+                })
+                .show();
+    }
+
+    private void shareCurrentPhoto(boolean email) {
+        if (currentPhotoPath == null || currentPhotoPath.trim().isEmpty()) {
+            toast("Kein Foto vorhanden.");
+            return;
+        }
+        File f = new File(currentPhotoPath);
+        if (!f.exists()) {
+            toast("Foto wurde nicht gefunden.");
+            return;
+        }
+        PhotoShareHelper.sharePhoto(this, f, email);
     }
 
     private void shareFile(File f, String mime) {
