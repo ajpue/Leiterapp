@@ -1,4 +1,4 @@
-# Leiterprüfung Android v0.7.2
+# Leiterprüfung Android v0.7.3
 
 Schlanke Offline-App für die Leiterprüfung auf älteren Android-Geräten.
 
@@ -120,3 +120,13 @@ Die App speichert ihre Arbeitsdaten lokal in SQLite. Das JSON-Backup ist für Ge
 - Ein Foto von `L-0001` kann dadurch nicht mehr versehentlich bei `L-0002` angezeigt oder gespeichert werden.
 - Gespeicherte Prüffotos bleiben in der Historie der richtigen Leiter erhalten.
 - Fotodateinamen enthalten zusätzlich die Leiter-ID.
+
+## Neu in v0.7.3
+- Neue Backups sind ZIP-Dateien statt reinem JSON.
+- Das ZIP enthält `backup.json` und alle vorhandenen Prüffotos unter `photos/`.
+- Beim Gerätewechsel werden die Fotos beim Restore auf das neue Gerät kopiert.
+- Die gespeicherten `photo_path`-Einträge werden automatisch auf die neuen lokalen Pfade gesetzt.
+- Automatische Backups: `leiterpruefung_LATEST.zip` plus tägliche ZIP-Dateien.
+- 30-Tage-Aufbewahrung bleibt bestehen.
+- Geteilte Backups sind jetzt ZIP-Dateien mit Daten und Fotos.
+- Alte JSON-Backups bleiben lesbar, enthalten aber naturgemäß keine Bilddateien.

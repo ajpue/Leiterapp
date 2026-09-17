@@ -506,14 +506,16 @@ public class MainActivity extends Activity {
     private void chooseRestoreFile() {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("application/json");
+        i.setType("*/*");
+        i.putExtra(Intent.EXTRA_MIME_TYPES,
+                new String[]{"application/zip", "application/json"});
         startActivityForResult(i, REQ_RESTORE);
     }
 
     private void shareBackup() {
         try {
             File f = BackupManager.createShareBackup(this, db);
-            shareFile(f, "application/json");
+            shareFile(f, "application/zip");
         } catch (Exception e) {
             toast("Backup konnte nicht erstellt werden: " + e.getMessage());
         }
@@ -709,12 +711,13 @@ public class MainActivity extends Activity {
 
     private void restoreWithConfirmation(Uri uri) {
         try {
-            JSONObject backup = BackupManager.readJson(this, uri);
+            JSONObject backup = BackupManager.readBackupForRestore(this, uri);
             int count = backup.getJSONArray("inspections").length();
             new AlertDialog.Builder(this)
                     .setTitle("Backup wiederherstellen?")
                     .setMessage("Dabei werden die aktuell gespeicherten Prüfungen durch " +
                             count + " Prüfungen aus dem Backup ersetzt.\n\n" +
+                            "Bei ZIP-Backups werden enthaltene Prüffotos auf dieses Gerät übertragen.\n\n" +
                             "Nur fortfahren, wenn dieses Backup wirklich verwendet werden soll.")
                     .setNegativeButton("Abbrechen", null)
                     .setPositiveButton("Wiederherstellen", (d, w) -> {
