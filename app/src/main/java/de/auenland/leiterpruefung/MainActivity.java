@@ -64,6 +64,7 @@ public class MainActivity extends Activity {
     private Button deactivateButton;
     private final Spinner[] stepSpinners = new Spinner[6];
     private String currentPhotoPath;
+    private String currentPhotoLadderId = "";
     private String lastLoadedLadderId = "";
 
     private static final String[] STEP_TITLES = {
@@ -141,8 +142,18 @@ public class MainActivity extends Activity {
             @Override public void afterTextChanged(Editable s) {
                 String id = normalizeLadderId(s.toString());
                 updateDeactivateButton(id);
-                if (db.isValidLadder(id) && !id.equals(lastLoadedLadderId)) {
-                    loadLastLadderData(id);
+
+                if (db.isValidLadder(id)) {
+                    if (currentPhotoPath != null
+                            && !currentPhotoPath.trim().isEmpty()
+                            && !id.equals(currentPhotoLadderId)) {
+                        clearCurrentPhotoSelection(true);
+                        toast("Foto der vorherigen Leiter wurde verworfen.");
+                    }
+
+                    if (!id.equals(lastLoadedLadderId)) {
+                        loadLastLadderData(id);
+                    }
                 }
             }
         });
@@ -172,7 +183,7 @@ public class MainActivity extends Activity {
         photo.setOnClickListener(v -> takePhoto());
 
         photoInfo = new TextView(this);
-        photoInfo.setText("Kein Foto");
+        photoInfo.setText("Kein Foto für diese Prüfung");
         photoInfo.setPadding(0, dp(4), 0, dp(6));
         box.addView(photoInfo);
 
@@ -318,7 +329,12 @@ public class MainActivity extends Activity {
         cv.put("next_ts", cal.getTimeInMillis());
         cv.put("status", hasDefect ? "MANGEL / GESPERRT" : "i.O.");
         cv.put("defect", defectText);
-        cv.put("photo_path", currentPhotoPath == null ? "" : currentPhotoPath);
+        String photoForThisInspection =
+                (currentPhotoPath != null
+                        && !currentPhotoPath.trim().isEmpty()
+                        && id.equals(currentPhotoLadderId))
+                        ? currentPhotoPath : "";
+        cv.put("photo_path", photoForThisInspection);
         for (int i = 0; i < 6; i++) {
             cv.put("s" + (i + 1), steps[i]);
         }
@@ -326,6 +342,11 @@ public class MainActivity extends Activity {
         try {
             db.insertInspection(cv);
             boolean backedUp = BackupManager.backupAfterInspection(this, db);
+
+            // Das Foto gehört jetzt zur gespeicherten Prüfung.
+            // Für die nächste Prüfung darf es nicht im Hauptbildschirm hängen bleiben.
+            clearCurrentPhotoSelection(false);
+
             ladderId.setText(id);
             String status = hasDefect ? "MANGEL / GESPERRT" : "Prüfung bestanden";
             String backup = backedUp ? "\nSD-Backup erstellt." :
@@ -499,15 +520,34 @@ public class MainActivity extends Activity {
     }
 
     private void takePhoto() {
+        String id = normalizeLadderId(ladderId.getText().toString());
+        if (!db.isValidLadder(id)) {
+            toast("Bitte zuerst eine gültige Leiter-ID eingeben oder scannen.");
+            return;
+        }
+        if (!db.isLadderActive(id)) {
+            toast("Diese Leiter ist außer Betrieb. Erst reaktivieren.");
+            return;
+        }
+
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA_PERMISSION);
             return;
         }
+
         try {
+            // Ein noch nicht gespeichertes Foto derselben laufenden Prüfung wird ersetzt.
+            clearCurrentPhotoSelection(true);
+
             File dir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
             if (dir == null) throw new IllegalStateException("Kein Foto-Ordner");
-            File photo = File.createTempFile("leiter_", ".jpg", dir);
+
+            String prefix = id.replace("-", "_") + "_";
+            File photo = File.createTempFile(prefix, ".jpg", dir);
+
             currentPhotoPath = photo.getAbsolutePath();
+            currentPhotoLadderId = id;
+
             Uri uri = FileProvider.getUriForFile(
                     this, getPackageName() + ".files", photo);
             Intent i = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
@@ -516,10 +556,11 @@ public class MainActivity extends Activity {
                     Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivityForResult(i, REQ_PHOTO);
         } catch (Exception e) {
-            currentPhotoPath = null;
+            clearCurrentPhotoSelection(true);
             toast("Kamera konnte nicht gestartet werden: " + e.getMessage());
         }
     }
+
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
@@ -533,9 +574,34 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean hasCurrentPhotoForSelectedLadder() {
+        String selectedId = normalizeLadderId(ladderId.getText().toString());
+        return currentPhotoPath != null
+                && !currentPhotoPath.trim().isEmpty()
+                && selectedId.equals(currentPhotoLadderId)
+                && new File(currentPhotoPath).exists();
+    }
+
+    private void clearCurrentPhotoSelection(boolean deleteFile) {
+        if (deleteFile && currentPhotoPath != null && !currentPhotoPath.trim().isEmpty()) {
+            try {
+                File f = new File(currentPhotoPath);
+                if (f.exists()) f.delete();
+            } catch (Exception ignored) {
+            }
+        }
+
+        currentPhotoPath = null;
+        currentPhotoLadderId = "";
+
+        if (photoInfo != null) {
+            photoInfo.setText("Kein Foto für diese Prüfung");
+        }
+    }
+
     private void viewCurrentPhoto() {
-        if (currentPhotoPath == null || currentPhotoPath.trim().isEmpty()) {
-            toast("Kein Foto vorhanden.");
+        if (!hasCurrentPhotoForSelectedLadder()) {
+            toast("Für die aktuelle Prüfung ist kein Foto vorhanden.");
             return;
         }
         File f = new File(currentPhotoPath);
@@ -561,8 +627,8 @@ public class MainActivity extends Activity {
     }
 
     private void deleteCurrentPhoto() {
-        if (currentPhotoPath == null || currentPhotoPath.trim().isEmpty()) {
-            toast("Kein Foto vorhanden.");
+        if (!hasCurrentPhotoForSelectedLadder()) {
+            toast("Für die aktuelle Prüfung ist kein Foto vorhanden.");
             return;
         }
         new AlertDialog.Builder(this)
@@ -570,18 +636,15 @@ public class MainActivity extends Activity {
                 .setMessage("Nur das Foto wird gelöscht. Eine bereits gespeicherte Prüfung wird dadurch nicht verändert.")
                 .setNegativeButton("Abbrechen", null)
                 .setPositiveButton("Löschen", (d, w) -> {
-                    File f = new File(currentPhotoPath);
-                    if (f.exists()) f.delete();
-                    currentPhotoPath = null;
-                    photoInfo.setText("Kein Foto");
+                    clearCurrentPhotoSelection(true);
                     toast("Foto gelöscht.");
                 })
                 .show();
     }
 
     private void shareCurrentPhoto(boolean email) {
-        if (currentPhotoPath == null || currentPhotoPath.trim().isEmpty()) {
-            toast("Kein Foto vorhanden.");
+        if (!hasCurrentPhotoForSelectedLadder()) {
+            toast("Für die aktuelle Prüfung ist kein Foto vorhanden.");
             return;
         }
         File f = new File(currentPhotoPath);
@@ -637,10 +700,9 @@ public class MainActivity extends Activity {
             if (uri != null) restoreWithConfirmation(uri);
         } else if (requestCode == REQ_PHOTO) {
             if (resultCode == RESULT_OK && currentPhotoPath != null) {
-                photoInfo.setText("Foto gespeichert");
+                photoInfo.setText("Foto für " + currentPhotoLadderId + " aufgenommen");
             } else {
-                currentPhotoPath = null;
-                photoInfo.setText("Kein Foto");
+                clearCurrentPhotoSelection(true);
             }
         }
     }
